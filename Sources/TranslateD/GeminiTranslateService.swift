@@ -60,8 +60,25 @@ final class GeminiTranslateService {
                         [
                             "text": """
                             Translate the following text into \(targetLanguageName).
-                            Return only the translated text. Do not add explanations.
-                            Preserve product names, company names, code identifiers, and technical terms when appropriate.
+
+                            Requirements:
+
+                            * Return only the translated text.
+                            * Do not add explanations, notes, comments, introductions, or formatting that was not present in the original text.
+                            * Preserve the original meaning, tone, style, and intent as accurately as possible.
+                            * Keep the original structure, including paragraphs, line breaks, bullet points, numbering, tables, and spacing whenever possible.
+                            * Preserve product names, company names, brand names, personal names, code identifiers, API names, database names, programming languages, file names, URLs, email addresses, technical terms, and other proper nouns unless they have a widely accepted translation in the target language.
+                            * Do not translate code blocks, commands, configuration values, JSON keys, environment variables, function names, class names, package names, or terminal output unless explicitly required by the source text.
+                            * Maintain markdown formatting, HTML tags, special characters, emojis, and punctuation exactly as they appear.
+                            * If the source text contains placeholders such as {{variable}}, {variable}, %s, %d, :id, <tag>, [value], or similar template syntax, preserve them exactly.
+                            * If the source text is ambiguous, choose the most natural and contextually appropriate translation in the target language.
+                            * Adapt idioms, expressions, and cultural references naturally while preserving their intended meaning.
+                            * Preserve capitalization when relevant.
+                            * If the source text is already written in the target language, return the original text unchanged.
+                            * Never censor, summarize, shorten, expand, or rewrite the content.
+                            * Output only the final translated text in \(targetLanguageName).
+
+                            Target Language: \(targetLanguageName)
 
                             Text:
                             \(text)

@@ -10,6 +10,9 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
     private let targetLanguagePopup = NSPopUpButton()
     private let translateButton = NSButton(title: "Google", target: nil, action: nil)
     private let aiTranslateButton = NSButton(title: "AI", target: nil, action: nil)
+    private var autoTranslateWorkItem: DispatchWorkItem?
+    private var lastAutoTranslatedText = ""
+    private var googleTranslateSequence = 0
 
     var onOpenSettings: (() -> Void)?
 
@@ -41,6 +44,7 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
     }
 
     func setInputAndTranslate(_ text: String) {
+        autoTranslateWorkItem?.cancel()
         inputTextView.string = text
         performTranslate()
     }
@@ -196,10 +200,16 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
 
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(insertNewline(_:)) {
+            autoTranslateWorkItem?.cancel()
             performTranslate()
             return true
         }
         return false
+    }
+
+    func textDidChange(_ notification: Notification) {
+        guard notification.object as? NSTextView === inputTextView else { return }
+        scheduleAutoGoogleTranslate()
     }
 
     @objc private func pasteAndTranslate() {
@@ -208,23 +218,58 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
     }
 
     @objc private func performTranslate() {
+        autoTranslateWorkItem?.cancel()
+        performGoogleTranslate()
+    }
+
+    private func scheduleAutoGoogleTranslate() {
+        autoTranslateWorkItem?.cancel()
+
+        let text = inputTextView.string
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            lastAutoTranslatedText = ""
+            statusLabel.stringValue = ""
+            outputTextView.string = ""
+            return
+        }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let currentText = self.inputTextView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !currentText.isEmpty, currentText != self.lastAutoTranslatedText else { return }
+            self.lastAutoTranslatedText = currentText
+            self.performGoogleTranslate()
+        }
+
+        autoTranslateWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
+    }
+
+    private func performGoogleTranslate() {
         let text = inputTextView.string
         let targetLanguage = selectedTargetLanguageCode()
+        googleTranslateSequence += 1
+        let sequence = googleTranslateSequence
+
         statusLabel.stringValue = "Google translating..."
         outputTextView.string = ""
 
         Task { @MainActor in
             do {
                 let result = try await translator.translate(text, targetLanguage: targetLanguage)
+                guard sequence == googleTranslateSequence else { return }
                 outputTextView.string = result.translatedText
                 statusLabel.stringValue = result.detectedLanguage.map { "Detected: \($0)" } ?? "Done"
             } catch {
+                guard sequence == googleTranslateSequence else { return }
                 statusLabel.stringValue = error.localizedDescription
             }
         }
     }
 
     @objc private func performGeminiTranslate() {
+        autoTranslateWorkItem?.cancel()
         let text = inputTextView.string
         let targetLanguageName = selectedTargetLanguageName()
         statusLabel.stringValue = "Gemini translating..."
