@@ -89,10 +89,11 @@ private final class RegionSelectionView: NSView {
     private var currentPoint: CGPoint?
     private var didComplete = false
 
+    private var cursorTrackingArea: NSTrackingArea?
+
     init() {
         super.init(frame: .zero)
         wantsLayer = true
-        addCursorRect(bounds, cursor: .crosshair)
     }
 
     required init?(coder: NSCoder) {
@@ -100,6 +101,35 @@ private final class RegionSelectionView: NSView {
     }
 
     override var acceptsFirstResponder: Bool { true }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let cursorTrackingArea {
+            removeTrackingArea(cursorTrackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .cursorUpdate],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        cursorTrackingArea = area
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        NSCursor.crosshair.set()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        NSCursor.crosshair.push()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        NSCursor.pop()
+    }
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .crosshair)
