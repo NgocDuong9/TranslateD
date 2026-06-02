@@ -1,0 +1,41 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Build outputs and packaged apps
+dist/
+*.app
+*.dmg
+*.pkg
+*.xcarchive
+*.ipa
+
+# Xcode user state
+DerivedData/
+*.xcuserdata/
+*.xcuserstate
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# macOS filesystem metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# Local editor and environment files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+*.log
+.env
+.env.*
+
+# Runtime data if the app is launched from the repo during testing
+Clipboard.sqlite
+Clipboard.sqlite-*
+Assets/
