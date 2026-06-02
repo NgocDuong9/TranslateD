@@ -1,41 +1,75 @@
 import AppKit
 
-final class RegionSelectionWindowController: NSWindowController {
-    private let selectionView: RegionSelectionView
+struct RegionSelection {
+    let rect: CGRect
+    let screen: NSScreen
+}
 
-    init(screen: NSScreen, onComplete: @escaping (CGRect?) -> Void) {
-        selectionView = RegionSelectionView(onComplete: onComplete)
-        let window = RegionSelectionWindow(contentRect: screen.frame)
-        window.contentView = selectionView
-        window.setFrame(screen.frame, display: true)
-        super.init(window: window)
+final class RegionSelectionWindowController {
+    private let screens: [NSScreen]
+    private let onComplete: (RegionSelection?) -> Void
+    private var windows: [RegionSelectionWindow] = []
+    private var didComplete = false
+
+    init(screens: [NSScreen] = NSScreen.screens, onComplete: @escaping (RegionSelection?) -> Void) {
+        self.screens = screens
+        self.onComplete = onComplete
+        self.windows = screens.map { screen in
+            let window = RegionSelectionWindow(screen: screen)
+            window.selectionView.onComplete = { [weak self, weak screen] rect in
+                guard let self else { return }
+                guard let rect, let screen else {
+                    self.complete(with: nil)
+                    return
+                }
+                self.complete(with: RegionSelection(rect: rect, screen: screen))
+            }
+            return window
+        }
     }
 
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
+    func showWindows() {
+        for window in windows {
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+        }
 
-    override func showWindow(_ sender: Any?) {
-        super.showWindow(sender)
-        window?.makeKeyAndOrderFront(sender)
-        window?.makeFirstResponder(selectionView)
-        window?.orderFrontRegardless()
+        if let keyWindow = windows.first(where: { $0.targetScreen == NSScreen.main }) ?? windows.first {
+            keyWindow.makeKey()
+            keyWindow.makeFirstResponder(keyWindow.selectionView)
+        }
     }
 
     func cancel() {
-        selectionView.cancelSelection()
+        complete(with: nil)
+    }
+
+    private func complete(with selection: RegionSelection?) {
+        guard !didComplete else { return }
+        didComplete = true
+        windows.forEach { $0.orderOut(nil) }
+        windows.removeAll()
+        onComplete(selection)
     }
 }
 
 private final class RegionSelectionWindow: NSWindow {
-    init(contentRect: NSRect) {
+    let targetScreen: NSScreen
+    let selectionView: RegionSelectionView
+
+    init(screen: NSScreen) {
+        self.targetScreen = screen
+        self.selectionView = RegionSelectionView()
+
         super.init(
-            contentRect: contentRect,
+            contentRect: screen.frame,
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
 
+        contentView = selectionView
+        setFrame(screen.frame, display: true)
         isOpaque = false
         backgroundColor = .clear
         level = .screenSaver
@@ -49,13 +83,13 @@ private final class RegionSelectionWindow: NSWindow {
 }
 
 private final class RegionSelectionView: NSView {
-    private let onComplete: (CGRect?) -> Void
+    var onComplete: ((CGRect?) -> Void)?
+
     private var startPoint: CGPoint?
     private var currentPoint: CGPoint?
     private var didComplete = false
 
-    init(onComplete: @escaping (CGRect?) -> Void) {
-        self.onComplete = onComplete
+    init() {
         super.init(frame: .zero)
         wantsLayer = true
         addCursorRect(bounds, cursor: .crosshair)
@@ -94,6 +128,8 @@ private final class RegionSelectionView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        window?.makeKey()
+        window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
         startPoint = point
         currentPoint = point
@@ -134,8 +170,7 @@ private final class RegionSelectionView: NSView {
     private func complete(with rect: CGRect?) {
         guard !didComplete else { return }
         didComplete = true
-        window?.orderOut(nil)
-        onComplete(rect)
+        onComplete?(rect)
     }
 
     private var selectionRect: CGRect? {

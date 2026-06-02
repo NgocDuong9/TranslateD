@@ -52,12 +52,11 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
         popover.performClose(nil)
 
-        guard let screen = NSScreen.main else { return }
-        let controller = RegionSelectionWindowController(screen: screen) { [weak self] rect in
+        let controller = RegionSelectionWindowController { [weak self] selection in
             guard let self else { return }
             self.regionSelectionWindowController = nil
 
-            guard let rect else {
+            guard let selection else {
                 return
             }
 
@@ -65,8 +64,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
                 Task { @MainActor in
                     do {
                         let text = try await self.ocrService.recognizeScreenText(
-                            in: rect,
-                            screen: screen,
+                            in: selection.rect,
+                            screen: selection.screen,
                             language: self.settings.ocrLanguage
                         )
                         self.showPopover()
@@ -86,7 +85,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
         regionSelectionWindowController = controller
         NSApp.activate(ignoringOtherApps: true)
-        controller.showWindow(nil)
+        controller.showWindows()
     }
 
     private func configureStatusItem() {
