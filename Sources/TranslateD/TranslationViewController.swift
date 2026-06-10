@@ -1,9 +1,11 @@
 import AppKit
 
-final class TranslationViewController: NSViewController, NSTextViewDelegate {
+final class TranslationViewController: NSViewController, NSTextViewDelegate, NSSpeechSynthesizerDelegate {
     private let translator: GoogleTranslateService
     private let geminiTranslator = GeminiTranslateService()
     private let settings: AppSettings
+    private let speechSynthesizer = NSSpeechSynthesizer()
+    private let preferredEnglishVoiceNames = ["Alex", "Samantha", "Ava", "Daniel", "Karen", "Moira", "Tessa"]
     private let inputTextView = NSTextView()
     private let outputTextView = NSTextView()
     private let statusLabel = NSTextField(labelWithString: "")
@@ -13,6 +15,7 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
     private var autoTranslateWorkItem: DispatchWorkItem?
     private var lastAutoTranslatedText = ""
     private var googleTranslateSequence = 0
+    private var detectedSourceLanguageCode: String?
 
     var onOpenSettings: (() -> Void)?
 
@@ -20,6 +23,7 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
         self.translator = translator
         self.settings = settings
         super.init(nibName: nil, bundle: nil)
+        speechSynthesizer.delegate = self
     }
 
     required init?(coder: NSCoder) {
@@ -103,8 +107,20 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
         let pasteButton = NSButton(title: "Paste", target: self, action: #selector(pasteAndTranslate))
         pasteButton.bezelStyle = .inline
 
+        let speakInputButton = speechButton(
+            accessibilityDescription: "Speak original text",
+            toolTip: "Speak original text",
+            action: #selector(speakInputText)
+        )
+
         let copyButton = NSButton(title: "Copy", target: self, action: #selector(copyOutput))
         copyButton.bezelStyle = .inline
+
+        let speakOutputButton = speechButton(
+            accessibilityDescription: "Speak translation",
+            toolTip: "Speak translation",
+            action: #selector(speakOutputText)
+        )
 
         translateButton.target = self
         translateButton.action = #selector(performTranslate)
@@ -123,11 +139,13 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
         statusLabel.lineBreakMode = .byTruncatingTail
 
         footer.addArrangedSubview(pasteButton)
+        footer.addArrangedSubview(speakInputButton)
         footer.addArrangedSubview(translateButton)
         footer.addArrangedSubview(aiTranslateButton)
         footer.addArrangedSubview(statusLabel)
         footer.addArrangedSubview(NSView())
         footer.addArrangedSubview(targetLanguagePopup)
+        footer.addArrangedSubview(speakOutputButton)
         footer.addArrangedSubview(copyButton)
 
         view.addSubview(header)
@@ -185,6 +203,22 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
         return scrollView
     }
 
+    private func speechButton(
+        accessibilityDescription: String,
+        toolTip: String,
+        action: Selector
+    ) -> NSButton {
+        let image = NSImage(
+            systemSymbolName: "speaker.wave.2",
+            accessibilityDescription: accessibilityDescription
+        )!
+        let button = NSButton(image: image, target: self, action: action)
+        button.bezelStyle = .regularSquare
+        button.isBordered = false
+        button.toolTip = toolTip
+        return button
+    }
+
     private func updateWrapping(for textView: NSTextView) {
         guard let scrollView = textView.enclosingScrollView else { return }
         let contentWidth = max(scrollView.contentSize.width, 1)
@@ -208,6 +242,7 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
 
     func textDidChange(_ notification: Notification) {
         guard notification.object as? NSTextView === inputTextView else { return }
+        detectedSourceLanguageCode = nil
         scheduleAutoGoogleTranslate()
     }
 
@@ -258,6 +293,7 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
             do {
                 let result = try await translator.translate(text, targetLanguage: targetLanguage)
                 guard sequence == googleTranslateSequence else { return }
+                detectedSourceLanguageCode = result.detectedLanguage
                 outputTextView.string = result.translatedText
                 statusLabel.stringValue = result.detectedLanguage.map { "Detected: \($0)" } ?? "Done"
             } catch {
@@ -286,6 +322,112 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
                 statusLabel.stringValue = error.localizedDescription
             }
         }
+    }
+
+    @objc private func speakInputText() {
+        speak(inputTextView.string, languageCode: detectedSourceLanguageCode)
+    }
+
+    @objc private func speakOutputText() {
+        speak(outputTextView.string, languageCode: selectedTargetLanguageCode())
+    }
+
+    private func speak(_ text: String, languageCode: String?) {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            statusLabel.stringValue = "Nothing to speak."
+            return
+        }
+
+        guard !speechSynthesizer.isSpeaking else {
+            speechSynthesizer.stopSpeaking()
+            statusLabel.stringValue = ""
+            return
+        }
+
+        let resolvedLanguageCode = languageCode ?? guessedSpeechLanguageCode(for: trimmedText)
+        speechSynthesizer.rate = speechRate(for: resolvedLanguageCode)
+        speechSynthesizer.volume = 1.0
+
+        if let voice = voiceName(for: resolvedLanguageCode) {
+            speechSynthesizer.setVoice(voice)
+        } else {
+            speechSynthesizer.setVoice(nil)
+        }
+
+        speechSynthesizer.startSpeaking(trimmedText)
+        statusLabel.stringValue = "Speaking..."
+    }
+
+    func speechSynthesizer(_ sender: NSSpeechSynthesizer, didFinishSpeaking finishedSpeaking: Bool) {
+        statusLabel.stringValue = ""
+    }
+
+    private func voiceName(for languageCode: String?) -> NSSpeechSynthesizer.VoiceName? {
+        guard let languageCode else { return nil }
+
+        let normalizedCode = languageCode
+            .replacingOccurrences(of: "_", with: "-")
+            .lowercased()
+        let languagePrefix = normalizedCode
+            .split(separator: "-")
+            .first
+            .map(String.init)
+
+        let matchingVoices = NSSpeechSynthesizer.availableVoices.filter { voice in
+            guard let localeIdentifier = localeIdentifier(for: voice) else { return false }
+            if localeIdentifier.hasPrefix(normalizedCode) {
+                return true
+            }
+
+            guard let languagePrefix else { return false }
+            return localeIdentifier.hasPrefix(languagePrefix)
+        }
+
+        if languagePrefix == "en",
+           let preferredVoice = matchingVoices.max(by: { voiceScore($0, languageCode: normalizedCode) < voiceScore($1, languageCode: normalizedCode) }) {
+            return preferredVoice
+        }
+
+        return matchingVoices.first
+    }
+
+    private func localeIdentifier(for voice: NSSpeechSynthesizer.VoiceName) -> String? {
+        let attributes = NSSpeechSynthesizer.attributes(forVoice: voice)
+        return (attributes[.localeIdentifier] as? String)?
+            .replacingOccurrences(of: "_", with: "-")
+            .lowercased()
+    }
+
+    private func voiceScore(_ voice: NSSpeechSynthesizer.VoiceName, languageCode: String) -> Int {
+        let attributes = NSSpeechSynthesizer.attributes(forVoice: voice)
+        let voiceName = (attributes[.name] as? String ?? "")
+            .lowercased()
+        let localeIdentifier = localeIdentifier(for: voice) ?? ""
+        let preferredVoiceScore = preferredEnglishVoiceNames
+            .enumerated()
+            .first { _, preferredName in voiceName == preferredName.lowercased() }
+            .map { preferredEnglishVoiceNames.count - $0.offset } ?? 0
+
+        return (localeIdentifier == languageCode ? 100 : 0) + preferredVoiceScore
+    }
+
+    private func guessedSpeechLanguageCode(for text: String) -> String? {
+        if text.range(of: #"[A-Za-z]"#, options: .regularExpression) != nil {
+            return "en-US"
+        }
+
+        return nil
+    }
+
+    private func speechRate(for languageCode: String?) -> Float {
+        guard let languageCode else { return 170 }
+
+        if languageCode.lowercased().hasPrefix("en") {
+            return 155
+        }
+
+        return 170
     }
 
     @objc private func copyOutput() {
