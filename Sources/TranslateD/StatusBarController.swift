@@ -116,7 +116,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             self?.onOpenSettings()
         }
 
-        popover.contentSize = NSSize(width: 600, height: 230)
+        popover.contentSize = NSSize(width: 760, height: 320)
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self

@@ -27,7 +27,7 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
     }
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 230))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 760, height: 320))
         view.wantsLayer = true
         view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         buildInterface()
@@ -100,9 +100,8 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
         footer.spacing = 12
         footer.translatesAutoresizingMaskIntoConstraints = false
 
-        let pasteButton = NSButton(image: NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Paste")!, target: self, action: #selector(pasteAndTranslate))
+        let pasteButton = NSButton(title: "Paste", target: self, action: #selector(pasteAndTranslate))
         pasteButton.bezelStyle = .inline
-        pasteButton.isBordered = false
 
         let copyButton = NSButton(title: "Copy", target: self, action: #selector(copyOutput))
         copyButton.bezelStyle = .inline
@@ -144,7 +143,7 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
             textStack.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 10),
             textStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 26),
             textStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -26),
-            textStack.heightAnchor.constraint(equalToConstant: 132),
+            textStack.heightAnchor.constraint(equalToConstant: 218),
 
             footer.topAnchor.constraint(equalTo: textStack.bottomAnchor, constant: 12),
             footer.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 26),
@@ -177,10 +176,10 @@ final class TranslationViewController: NSViewController, NSTextViewDelegate {
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
-        textView.textContainer?.containerSize = NSSize(width: 260, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.containerSize = NSSize(width: 340, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.lineBreakMode = .byCharWrapping
-        textView.frame = NSRect(origin: .zero, size: NSSize(width: 260, height: 132))
+        textView.frame = NSRect(origin: .zero, size: NSSize(width: 340, height: 218))
         textView.setAccessibilityPlaceholderValue(placeholder)
         scrollView.documentView = textView
         return scrollView
